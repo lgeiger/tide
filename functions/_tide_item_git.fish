@@ -44,16 +44,23 @@ function _tide_item_git
 
     # Git status/stash + Upstream behind/ahead
     test $in_gdir = true && set -l _set_dir_opt -C $gdir/..
-    # Suppress errors in case we are in a bare repo or there is no upstream
-    set -l stat (git $_set_dir_opt --no-optional-locks status --porcelain 2>/dev/null)
-    string match -qr '(0|(?<stash>.*))\n(0|(?<conflicted>.*))\n(0|(?<staged>.*))
-(0|(?<dirty>.*))\n(0|(?<untracked>.*))(\n(0|(?<behind>.*))\t(0|(?<ahead>.*)))?' \
-        "$(git $_set_dir_opt stash list 2>/dev/null | count
-        string match -r ^UU $stat | count
-        string match -r ^[ADMR] $stat | count
-        string match -r ^.[ADMR] $stat | count
-        string match -r '^\?\?' $stat | count
-        git rev-list --count --left-right @{upstream}...HEAD 2>/dev/null)"
+    set -l stat (git $_set_dir_opt --no-optional-locks status --porcelain --branch 2>/dev/null)
+
+    set -l ahead (string match -r '(?<=ahead )\d+' $stat[1])
+    set -l behind (string match -r '(?<=behind )\d+' $stat[1])
+
+    set -l conflicted (count (string match -r '^UU' $stat[2..]))
+    set -l staged (count (string match -r '^[ADMR]' $stat[2..]))
+    set -l dirty (count (string match -r '^.[ADMR]' $stat[2..]))
+    set -l untracked (count (string match -r '^\?\?' $stat[2..]))
+
+    set -l stash (git $_set_dir_opt stash list 2>/dev/null | count)
+
+    test "$stash" = 0 && set -e stash
+    test "$conflicted" = 0 && set -e conflicted
+    test "$staged" = 0 && set -e staged
+    test "$dirty" = 0 && set -e dirty
+    test "$untracked" = 0 && set -e untracked
 
     if test -n "$operation$conflicted"
         set -g tide_git_bg_color $tide_git_bg_color_urgent
